@@ -10,7 +10,11 @@ type Forest struct {
 }
 
 // NewForest creates a new empty Forest with the given distance function.
+// Panics if dist is nil.
 func NewForest(dist DistanceFunc) *Forest {
+	if dist == nil {
+		panic("bktree: nil distance function")
+	}
 	return &Forest{
 		trees: make(map[int]*BKTree),
 		dist:  dist,
@@ -45,7 +49,10 @@ func (f *Forest) Query(word string, maxDist int) []Result {
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].Distance < results[j].Distance
+		if results[i].Distance != results[j].Distance {
+			return results[i].Distance < results[j].Distance
+		}
+		return results[i].Word < results[j].Word
 	})
 	return results
 }

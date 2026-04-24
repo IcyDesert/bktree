@@ -23,7 +23,11 @@ type node struct {
 }
 
 // New creates a new empty BKTree with the given distance function.
+// Panics if dist is nil.
 func New(dist DistanceFunc) *BKTree {
+	if dist == nil {
+		panic("bktree: nil distance function")
+	}
 	return &BKTree{
 		dist: dist,
 	}
