@@ -272,3 +272,68 @@ func TestBKTreeDuplicateInsertion(t *testing.T) {
 		t.Errorf("Expected 2 exact matches for 'test', got %d", len(got))
 	}
 }
+
+func TestLevenshteinUnicode(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want int
+	}{
+		// Each CJK character is a single rune; byte length differs.
+		{"你好", "你好", 0},
+		{"你好", "您好", 1},
+		{"中", "国", 1},
+		{"hello", "你好", 5}, // completely different, 5 runes vs 2 runes
+		{"café", "cafe", 1}, // é is one rune, e is one rune
+		{"日本語", "日本語", 0},
+		{"日本語", "日本话", 1},
+	}
+	for _, tt := range tests {
+		got := Levenshtein(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("Levenshtein(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestBKTreeNilDistance(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("New(nil) should panic")
+		}
+	}()
+	New(nil)
+}
+
+func TestForestNilDistance(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("NewForest(nil) should panic")
+		}
+	}()
+	NewForest(nil)
+}
+
+// TestForestSortTieBreaker verifies that when multiple results have the
+// same distance, they are sorted lexicographically by word.
+func TestForestSortTieBreaker(t *testing.T) {
+	forest := NewForest(Levenshtein)
+	// All of these are edit distance 1 from "apple" (last letter substituted).
+	words := []string{"apply", "applx", "appla"}
+	for _, w := range words {
+		forest.Add(w)
+	}
+
+	got := forest.Query("apple", 1)
+	if len(got) != 3 {
+		t.Fatalf("Expected 3 results, got %d: %v", len(got), got)
+	}
+
+	want := []Result{
+		{Word: "appla", Distance: 1},
+		{Word: "applx", Distance: 1},
+		{Word: "apply", Distance: 1},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Query = %v, want %v", got, want)
+	}
+}
