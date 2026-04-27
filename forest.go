@@ -1,6 +1,10 @@
 package bktree
 
-import "sort"
+import (
+	"encoding/gob"
+	"io"
+	"sort"
+)
 
 // Forest partitions words by length into multiple BK-Trees.
 // This enables natural Hamming support and Levenshtein length-based pruning.
@@ -72,4 +76,34 @@ func (f *Forest) Exists(word string, maxDist int) bool {
 		}
 	}
 	return false
+}
+
+// Save writes the forest topology to w using gob encoding.
+// The distance function is not persisted.
+func (f *Forest) Save(w io.Writer) error {
+	// Encode as map[int]*Node to avoid gob encoding BKTree.dist (a function).
+	nodes := make(map[int]*Node, len(f.trees))
+	for length, tree := range f.trees {
+		nodes[length] = tree.root
+	}
+	return gob.NewEncoder(w).Encode(nodes)
+}
+
+// LoadForest reads a forest topology from r using gob encoding.
+func LoadForest(r io.Reader, dist DistanceFunc) (*Forest, error) {
+	if dist == nil {
+		panic("bktree: nil distance function")
+	}
+	var nodes map[int]*Node
+	if err := gob.NewDecoder(r).Decode(&nodes); err != nil {
+		return nil, err
+	}
+	f := NewForest(dist)
+	f.trees = make(map[int]*BKTree, len(nodes))
+	for length, root := range nodes {
+		tree := New(dist)
+		tree.root = root
+		f.trees[length] = tree
+	}
+	return f, nil
 }

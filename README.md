@@ -91,6 +91,39 @@ tree.Add("bar")
 results := tree.Query("baz", 2)
 ```
 
+## Persistence
+
+Trees can be saved to disk with **gob encoding**. Only the topology is persisted — the distance function is **not** saved. You must provide the same function when loading.
+
+```go
+import "os"
+
+// Build
+forest := bktree.NewForest(bktree.Levenshtein)
+forest.Add("book")
+forest.Add("books")
+
+// Save
+f, _ := os.Create(bktree.DefaultFilename("index.gob", bktree.Levenshtein))
+// Creates "index_levenshtein.gob"
+forest.Save(f)
+f.Close()
+
+// Load (elsewhere, later)
+f, _ = os.Open("index_levenshtein.gob")
+defer f.Close()
+
+loaded, err := bktree.LoadForest(f, bktree.Levenshtein)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Use exactly like before
+results := loaded.Query("boak", 2)
+```
+
+`BKTree` uses the same pattern with `Save` and `Load`.
+
 ## How Forest Pruning Works
 
 For Levenshtein and other reasonable metrics, if `dist(a, b) <= d` then `|len(a) - len(b)| <= d`. `Forest.Query` exploits this to skip entire length-buckets, reducing the search space.
