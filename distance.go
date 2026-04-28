@@ -1,5 +1,12 @@
 package bktree
 
+import (
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"strings"
+)
+
 // Levenshtein computes the edit distance between two strings
 // using the Wagner-Fischer algorithm with O(min(len(a),len(b))) space.
 // The distance is calculated over Unicode code points (runes), not bytes.
@@ -72,4 +79,31 @@ func min(a, b, c int) int {
 		return b
 	}
 	return c
+}
+
+// metricName returns the short name of a distance function (e.g. "Levenshtein"),
+// or "unknown" if the name cannot be determined.
+func metricName(fn DistanceFunc) string {
+	if fn == nil {
+		return "nil"
+	}
+	pc := reflect.ValueOf(fn).Pointer()
+	f := runtime.FuncForPC(pc)
+	if f == nil {
+		return "unknown"
+	}
+	name := f.Name()
+	if i := strings.LastIndex(name, "."); i >= 0 {
+		return name[i+1:]
+	}
+	return name
+}
+
+// DefaultFilename returns a filename with the metric name embedded,
+// e.g. DefaultFilename("data.gob", Levenshtein) → "data_levenshtein.gob".
+func DefaultFilename(path string, fn DistanceFunc) string {
+	metric := metricName(fn)
+	ext := filepath.Ext(path)
+	base := strings.TrimSuffix(path, ext)
+	return base + "_" + strings.ToLower(metric) + ext
 }

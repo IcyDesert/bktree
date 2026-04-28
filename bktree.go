@@ -1,6 +1,10 @@
 package bktree
 
-import "sort"
+import (
+	"encoding/gob"
+	"io"
+	"sort"
+)
 
 // DistanceFunc defines a metric distance function between two strings.
 type DistanceFunc func(a, b string) int
@@ -13,13 +17,14 @@ type Result struct {
 
 // BKTree is a Burkhard-Keller tree for fast approximate string matching.
 type BKTree struct {
-	root *node
+	root *Node
 	dist DistanceFunc
 }
 
-type node struct {
-	word     string
-	children map[int]*node
+// Node is a node in the BK-tree.
+type Node struct {
+	Word     string
+	Children map[int]*Node
 }
 
 // New creates a new empty BKTree with the given distance function.
@@ -36,23 +41,23 @@ func New(dist DistanceFunc) *BKTree {
 // Add inserts a word into the tree.
 func (t *BKTree) Add(word string) {
 	if t.root == nil {
-		t.root = &node{
-			word:     word,
-			children: make(map[int]*node),
+		t.root = &Node{
+			Word:     word,
+			Children: make(map[int]*Node),
 		}
 		return
 	}
 	t.root.add(word, t.dist)
 }
 
-func (n *node) add(word string, dist DistanceFunc) {
-	d := dist(word, n.word)
-	if child, ok := n.children[d]; ok {
+func (n *Node) add(word string, dist DistanceFunc) {
+	d := dist(word, n.Word)
+	if child, ok := n.Children[d]; ok {
 		child.add(word, dist)
 	} else {
-		n.children[d] = &node{
-			word:     word,
-			children: make(map[int]*node),
+		n.Children[d] = &Node{
+			Word:     word,
+			Children: make(map[int]*Node),
 		}
 	}
 }
@@ -74,12 +79,12 @@ func (t *BKTree) Query(word string, maxDist int) []Result {
 	return results
 }
 
-func (n *node) query(word string, maxDist int, dist DistanceFunc, results *[]Result) {
-	d := dist(word, n.word)
+func (n *Node) query(word string, maxDist int, dist DistanceFunc, results *[]Result) {
+	d := dist(word, n.Word)
 	if d <= maxDist {
-		*results = append(*results, Result{Word: n.word, Distance: d})
+		*results = append(*results, Result{Word: n.Word, Distance: d})
 	}
-	for childDist, child := range n.children {
+	for childDist, child := range n.Children {
 		if childDist >= d-maxDist && childDist <= d+maxDist {
 			child.query(word, maxDist, dist, results)
 		}
@@ -95,12 +100,12 @@ func (t *BKTree) Exists(word string, maxDist int) bool {
 	return t.root.exists(word, maxDist, t.dist)
 }
 
-func (n *node) exists(word string, maxDist int, dist DistanceFunc) bool {
-	d := dist(word, n.word)
+func (n *Node) exists(word string, maxDist int, dist DistanceFunc) bool {
+	d := dist(word, n.Word)
 	if d <= maxDist {
 		return true
 	}
-	for childDist, child := range n.children {
+	for childDist, child := range n.Children {
 		if childDist >= d-maxDist && childDist <= d+maxDist {
 			if child.exists(word, maxDist, dist) {
 				return true
@@ -108,4 +113,34 @@ func (n *node) exists(word string, maxDist int, dist DistanceFunc) bool {
 		}
 	}
 	return false
+}
+
+// Save writes the tree topology to w using gob encoding.
+// The distance function is not persisted.
+func (t *BKTree) Save(w io.Writer) error {
+	enc := gob.NewEncoder(w)
+	if t.root == nil {
+		return enc.Encode(false) // nil marker
+	}
+	if err := enc.Encode(true); err != nil {
+		return err
+	}
+	return enc.Encode(t.root)
+}
+
+// Load reads a tree topology from r using gob encoding.
+func Load(r io.Reader, dist DistanceFunc) (*BKTree, error) {
+	t := New(dist)
+	dec := gob.NewDecoder(r)
+	var hasRoot bool
+	if err := dec.Decode(&hasRoot); err != nil {
+		return nil, err
+	}
+	if !hasRoot {
+		return t, nil
+	}
+	if err := dec.Decode(&t.root); err != nil {
+		return nil, err
+	}
+	return t, nil
 }

@@ -1,6 +1,8 @@
 package bktree
 
 import (
+	"bytes"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -335,5 +337,239 @@ func TestForestSortTieBreaker(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Query = %v, want %v", got, want)
+	}
+}
+
+func TestBKTreeRoundTrip(t *testing.T) {
+	original := New(Levenshtein)
+	words := []string{"book", "books", "cake", "boo", "cape", "cart"}
+	for _, w := range words {
+		original.Add(w)
+	}
+
+	var buf bytes.Buffer
+	if err := original.Save(&buf); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := Load(&buf, Levenshtein)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	queries := []struct {
+		word    string
+		maxDist int
+	}{
+		{"boak", 1},
+		{"boak", 2},
+		{"xyz", 3},
+	}
+
+	for _, q := range queries {
+		want := original.Query(q.word, q.maxDist)
+		got := loaded.Query(q.word, q.maxDist)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Query(%q, %d): got %v, want %v", q.word, q.maxDist, got, want)
+		}
+	}
+}
+
+func TestBKTreeEmptyRoundTrip(t *testing.T) {
+	original := New(Levenshtein)
+
+	var buf bytes.Buffer
+	if err := original.Save(&buf); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := Load(&buf, Levenshtein)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if loaded.Query("anything", 5) != nil {
+		t.Error("Empty tree Query should return nil after round-trip")
+	}
+	if loaded.Exists("anything", 5) {
+		t.Error("Empty tree Exists should return false after round-trip")
+	}
+}
+
+func TestForestRoundTrip(t *testing.T) {
+	original := NewForest(Levenshtein)
+	words := []string{"book", "books", "cake", "boo", "cape"}
+	for _, w := range words {
+		original.Add(w)
+	}
+
+	var buf bytes.Buffer
+	if err := original.Save(&buf); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := LoadForest(&buf, Levenshtein)
+	if err != nil {
+		t.Fatalf("LoadForest failed: %v", err)
+	}
+
+	queries := []struct {
+		word    string
+		maxDist int
+	}{
+		{"boak", 2},
+		{"hello", 1},
+		{"cake", 0},
+	}
+
+	for _, q := range queries {
+		want := original.Query(q.word, q.maxDist)
+		got := loaded.Query(q.word, q.maxDist)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Query(%q, %d): got %v, want %v", q.word, q.maxDist, got, want)
+		}
+	}
+}
+
+func TestForestEmptyRoundTrip(t *testing.T) {
+	original := NewForest(Levenshtein)
+
+	var buf bytes.Buffer
+	if err := original.Save(&buf); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := LoadForest(&buf, Levenshtein)
+	if err != nil {
+		t.Fatalf("LoadForest failed: %v", err)
+	}
+
+	if loaded.Query("anything", 5) != nil {
+		t.Error("Empty forest Query should return nil after round-trip")
+	}
+	if loaded.Exists("anything", 5) {
+		t.Error("Empty forest Exists should return false after round-trip")
+	}
+}
+
+func TestMetricName(t *testing.T) {
+	if got := metricName(Levenshtein); got != "Levenshtein" {
+		t.Errorf("metricName(Levenshtein) = %q, want %q", got, "Levenshtein")
+	}
+	if got := metricName(Hamming); got != "Hamming" {
+		t.Errorf("metricName(Hamming) = %q, want %q", got, "Hamming")
+	}
+	if got := metricName(nil); got != "nil" {
+		t.Errorf("metricName(nil) = %q, want %q", got, "nil")
+	}
+}
+
+func TestDefaultFilename(t *testing.T) {
+	got := DefaultFilename("data.gob", Levenshtein)
+	want := "data_levenshtein.gob"
+	if got != want {
+		t.Errorf("DefaultFilename(data.gob, Levenshtein) = %q, want %q", got, want)
+	}
+
+	got = DefaultFilename("/path/to/index", Hamming)
+	want = "/path/to/index_hamming"
+	if got != want {
+		t.Errorf("DefaultFilename(/path/to/index, Hamming) = %q, want %q", got, want)
+	}
+}
+
+func TestBKTreeFileRoundTrip(t *testing.T) {
+	original := New(Levenshtein)
+	words := []string{"book", "books", "cake", "boo", "cape", "cart"}
+	for _, w := range words {
+		original.Add(w)
+	}
+
+	f, err := os.CreateTemp("", "bktree_*.gob")
+	if err != nil {
+		t.Fatalf("CreateTemp failed: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	if err := original.Save(f); err != nil {
+		f.Close()
+		t.Fatalf("Save failed: %v", err)
+	}
+	f.Close()
+
+	f, err = os.Open(f.Name())
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer f.Close()
+
+	loaded, err := Load(f, Levenshtein)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	queries := []struct {
+		word    string
+		maxDist int
+	}{
+		{"boak", 1},
+		{"boak", 2},
+		{"xyz", 3},
+	}
+
+	for _, q := range queries {
+		want := original.Query(q.word, q.maxDist)
+		got := loaded.Query(q.word, q.maxDist)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Query(%q, %d): got %v, want %v", q.word, q.maxDist, got, want)
+		}
+	}
+}
+
+func TestForestFileRoundTrip(t *testing.T) {
+	original := NewForest(Levenshtein)
+	words := []string{"book", "books", "cake", "boo", "cape"}
+	for _, w := range words {
+		original.Add(w)
+	}
+
+	f, err := os.CreateTemp("", "forest_*.gob")
+	if err != nil {
+		t.Fatalf("CreateTemp failed: %v", err)
+	}
+	defer os.Remove(f.Name())
+
+	if err := original.Save(f); err != nil {
+		f.Close()
+		t.Fatalf("Save failed: %v", err)
+	}
+	f.Close()
+
+	f, err = os.Open(f.Name())
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer f.Close()
+
+	loaded, err := LoadForest(f, Levenshtein)
+	if err != nil {
+		t.Fatalf("LoadForest failed: %v", err)
+	}
+
+	queries := []struct {
+		word    string
+		maxDist int
+	}{
+		{"boak", 2},
+		{"hello", 1},
+		{"cake", 0},
+	}
+
+	for _, q := range queries {
+		want := original.Query(q.word, q.maxDist)
+		got := loaded.Query(q.word, q.maxDist)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Query(%q, %d): got %v, want %v", q.word, q.maxDist, got, want)
+		}
 	}
 }
