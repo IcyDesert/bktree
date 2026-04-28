@@ -91,14 +91,11 @@ func (f *Forest) Save(w io.Writer) error {
 
 // LoadForest reads a forest topology from r using gob encoding.
 func LoadForest(r io.Reader, dist DistanceFunc) (*Forest, error) {
-	if dist == nil {
-		panic("bktree: nil distance function")
-	}
+	f := NewForest(dist)
 	var nodes map[int]*Node
 	if err := gob.NewDecoder(r).Decode(&nodes); err != nil {
 		return nil, err
 	}
-	f := NewForest(dist)
 	f.trees = make(map[int]*BKTree, len(nodes))
 	for length, root := range nodes {
 		tree := New(dist)

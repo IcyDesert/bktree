@@ -130,15 +130,12 @@ func (t *BKTree) Save(w io.Writer) error {
 
 // Load reads a tree topology from r using gob encoding.
 func Load(r io.Reader, dist DistanceFunc) (*BKTree, error) {
-	if dist == nil {
-		panic("bktree: nil distance function")
-	}
+	t := New(dist)
 	dec := gob.NewDecoder(r)
 	var hasRoot bool
 	if err := dec.Decode(&hasRoot); err != nil {
 		return nil, err
 	}
-	t := New(dist)
 	if !hasRoot {
 		return t, nil
 	}
