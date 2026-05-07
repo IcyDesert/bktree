@@ -6,8 +6,13 @@ import (
 	"sort"
 )
 
-// Forest partitions words by length into multiple BK-Trees.
-// This enables natural Hamming support and Levenshtein length-based pruning.
+// Forest groups words by byte length into separate BK-trees.
+// Query skips trees whose byte length differs from the query by more than
+// maxDist. This works well for Hamming (which compares bytes) and for
+// Levenshtein on ASCII text. For Levenshtein on non-ASCII text, byte
+// length and rune length may differ; use BKTree if that matters.
+//
+// For distance functions not based on string length, use BKTree.
 type Forest struct {
 	trees map[int]*BKTree
 	dist  DistanceFunc

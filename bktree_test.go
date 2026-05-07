@@ -2,8 +2,10 @@ package bktree
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -284,7 +286,7 @@ func TestLevenshteinUnicode(t *testing.T) {
 		{"你好", "你好", 0},
 		{"你好", "您好", 1},
 		{"中", "国", 1},
-		{"hello", "你好", 5}, // completely different, 5 runes vs 2 runes
+		{"hello", "你好", 5},  // completely different, 5 runes vs 2 runes
 		{"café", "cafe", 1}, // é is one rune, e is one rune
 		{"日本語", "日本語", 0},
 		{"日本語", "日本话", 1},
@@ -572,4 +574,54 @@ func TestForestFileRoundTrip(t *testing.T) {
 			t.Errorf("Query(%q, %d): got %v, want %v", q.word, q.maxDist, got, want)
 		}
 	}
+}
+
+func ExampleForest_unsuitableDistance() {
+	// A distance function where matches may have different lengths.
+	// Forest partitions by length, so it can skip results that span buckets.
+	prefixDist := func(a, b string) int {
+		if strings.HasPrefix(a, b) || strings.HasPrefix(b, a) {
+			return 0
+		}
+		return 1
+	}
+
+	forest := NewForest(prefixDist)
+	forest.Add("golang") // length 6
+
+	// "go" is a prefix of "golang" (distance 0), but Forest only
+	// checks the length-2 bucket, which is empty.
+	results := forest.Query("go", 0)
+	fmt.Printf("Forest found %d results\n", len(results))
+
+	// BKTree does not partition by length, so it finds the match.
+	tree := New(prefixDist)
+	tree.Add("golang")
+	results = tree.Query("go", 0)
+	fmt.Printf("BKTree found %d results\n", len(results))
+	// Output:
+	// Forest found 0 results
+	// BKTree found 1 results
+}
+
+func ExampleForest_unicode() {
+	// Levenshtein operates on runes, but Forest groups by byte length.
+	// For ASCII text the two are the same; for Unicode they are not.
+	forest := NewForest(Levenshtein)
+	forest.Add("你好") // 2 runes, 6 bytes → bucket 6
+
+	// "你" (1 rune, 3 bytes) and "你好" (2 runes, 6 bytes) have
+	// Levenshtein distance 1. Forest queries bucket [2, 4] and
+	// skips bucket 6, missing the result.
+	results := forest.Query("你", 1)
+	fmt.Printf("Forest found %d results\n", len(results))
+
+	// BKTree does not partition by length, so it finds the match.
+	tree := New(Levenshtein)
+	tree.Add("你好")
+	results = tree.Query("你", 1)
+	fmt.Printf("BKTree found %d results\n", len(results))
+	// Output:
+	// Forest found 0 results
+	// BKTree found 1 results
 }
