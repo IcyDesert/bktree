@@ -5,9 +5,8 @@ A Go implementation of the [Burkhard-Keller Tree](https://en.wikipedia.org/wiki/
 ## Features
 
 - **Generic distance function** — plug in any metric (Levenshtein, Hamming, or your own)
-- **Single tree + Forest** — `BKTree` for general use; `Forest` partitions by string length for natural Hamming support and Levenshtein length-based pruning
-- **Exists shortcut** — `Exists(word, maxDist)` stops at the first match, faster than `Query` when you only need a boolean
-- **Sorted results** — `Query` returns results ordered by distance (then word)
+- **Persistence** — save and load trees with gob encoding
+- **Exists shortcut** — `Exists` stops at the first match, faster than `Query` when you only need a boolean
 - **Unicode-aware** — Levenshtein distance operates on runes, not raw bytes
 - **Zero dependencies** — standard library only
 
